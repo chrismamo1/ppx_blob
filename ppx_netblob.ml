@@ -130,7 +130,6 @@ let netblob_mapper argv =
         begin match pstr with
         | (* Could also have a single structure item which is the evaluation of a constant structure of the form [{ runtime = "URL"}] *)
           PStr [{ pstr_desc = Pstr_eval ({ pexp_loc = loc; pexp_desc = Pexp_record ([{txt = Lident "runtime"}, value], _)}, _) }] ->
-            let () = Printf.printf "found structure instance" in
             begin match Ast_convenience.get_str value with
             | Some sym ->
                 with_default_loc loc (fun () -> getnetblob_generator ~loc sym)
