@@ -67,5 +67,7 @@ next few months.
 TODO
 ----
 
- - Allow constraints to be placed on the parameters which will be accepted when
+ - Allow constraints to be placed on which parameters will be accepted when
  using the runtime netblob ppx, e.g. `[%netblob { runtime = "https://github.com/search" ; parameters = ["utf8"; "q"]}`
+ - Allow the user to place more security constraints when fetching a string at
+ compile time
