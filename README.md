@@ -70,4 +70,4 @@ TODO
  - Allow constraints to be placed on the parameters which will be accepted when
  using the runtime netblob ppx, e.g.
  
-    [%netblob { runtime = "https://github.com/search" ; parameters = ["utf8"; "q"]}
+     [%netblob { runtime = "https://github.com/search" ; parameters = ["utf8"; "q"]}
