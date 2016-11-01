@@ -1,7 +1,10 @@
 ._d/
+*.cache
 *.cmi
 *.cmo
 *.cmx
+*.log
 *.o
+*.swp
 ppx_netblob
 example/quine
