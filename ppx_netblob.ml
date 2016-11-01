@@ -59,7 +59,7 @@ let getnetblob_generator ~loc s =
         available at runtime, either.\n"
         s
   in
-  let s = Exp.constant (Const_string (s, None)) in
+  let s = Exp.constant (Pconst_string (s, None)) in
   [%expr
     let open Cohttp in
     let open Cohttp_lwt_unix in
