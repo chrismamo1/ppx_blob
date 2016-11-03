@@ -1,8 +1,9 @@
 (*  "https://goo.gl/nTD9Oc" *)
+open Lwt
 
 let () =
-  let open Lwt in
+  let get_message = [%netblob { runtime = "https://goo.gl/nTD9Oc" }] in
   Lwt_main.run (
-    [%netblob { runtime = "https://goo.gl/nTD9Oc" }] ~get:[] ()
+    get_message ()
     >>= fun s ->
     Lwt_io.printl s)
