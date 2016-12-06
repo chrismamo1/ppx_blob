@@ -20,4 +20,4 @@ depends: [
   "cohttp" {build}
   "lwt" {build}
 ]
-available: [ocaml-version >= "4.02.0"]
+available: [ocaml-version > "4.03.0"]

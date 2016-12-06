@@ -1,0 +1,1 @@
+<src/*.{ml,mli,byte,native}>: package(ppx_tools), package(ppx_tools.metaquot), package(ppx_deriving.api), package(result), package(cohttp.lwt), package(lwt), package(ppx_deriving), package(ppx_deriving.api)

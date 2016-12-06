@@ -3,3 +3,4 @@ PKG ppx_tools
 PKG cohttp.lwt
 PKG lwt
 PKG ppx_tools.metaquot
+PKG ppx_deriving.api
