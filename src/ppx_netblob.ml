@@ -105,14 +105,31 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                     [%expr
                       (fun s ->
                         let open Result in
-                        let json = Yojson.Safe.from_string s in
-                        [%e func] json)]
-                    (*[%expr
-                      (fun s ->
-                        let open Result in
-                        match Yojson.Safe.from_string s with
-                          | Ok json -> json
-                          | Error _ -> raise (Failure "Error decoding JSON"))]*)
+                        let mime =
+                          Cohttp.(
+                            Header.get (Response.headers resp) "Content-Type")
+                        in
+                        match String.trim (String.lowercase_ascii mime) with
+                          | Some "application/json; charset=utf-8"
+                          | None ->
+                              let json = Yojson.Safe.from_string s in
+                              begin match [%e func] json with
+                                | Ok _ as x ->
+                                    x
+                                | Error msg ->
+                                    Error (
+                                      "netblob: the following fragment does \
+                                       not adhere to the expected schema (" ^
+                                       msg ^ "):\n" ^
+                                       Yojson.Safe.pretty_to_string json
+                                       ^ "\n")
+                              end
+                          | Some s ->
+                              Error (
+                                Printf.sprintf
+                                  "bad response Content-Type (%s):expected (%s)"
+                                  mime
+                                  "application/json; charset=utf-8"))]
                 | `Xml -> [%expr (fun s -> Xmlm.make_input (`String (0, s)))]
                 | `Text -> [%expr (fun s -> s)]
             in
@@ -245,11 +262,22 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
       let uri = Uri.of_string [%e uri] in
       [%e creator]]
   in
-  [Vb.mk (pvar (Ppx_deriving.mangle_type_decl (`Prefix deriver) type_decl))
-    (Ppx_deriving.sanitize ~quoter creator)]
+  let prefix =
+    match meth with
+      | `Get -> "netblob_get"
+      | `Post -> "netblob_post"
+  in
+  let name =
+    match type_decl with
+      | { ptype_name = { txt = "t" } } ->
+          prefix
+      | _ ->
+          Ppx_deriving.mangle_type_decl (`Prefix prefix) type_decl
+  in
+  [Vb.mk (pvar name) (Ppx_deriving.sanitize ~quoter creator)]
 
 let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
-  parse_options options;
+  let url, meth, format = parse_options options in
   let typ = Ppx_deriving.core_type_of_type_decl type_decl in
   let typ =
     match type_decl.ptype_kind with
@@ -277,7 +305,19 @@ let sig_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
           typ labels
       | _ -> raise_errorf ~loc "%s can only be derived for record types" deriver
   in
-  [Sig.value (Val.mk (mknoloc (Ppx_deriving.mangle_type_decl (`Prefix deriver) type_decl)) typ)]
+  let prefix =
+    match meth with
+      | `Get -> "netblob_get"
+      | `Post -> "netblob_post"
+  in
+  let name =
+    match type_decl with
+      | { ptype_name = { txt = "t" } } ->
+          prefix
+      | _ ->
+          Ppx_deriving.mangle_type_decl (`Prefix prefix) type_decl
+  in
+  [Sig.value (Val.mk (mknoloc name) typ)]
 
 let () =
   Ppx_deriving.(register (create deriver
