@@ -108,10 +108,13 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                         let mime =
                           Cohttp.(
                             Header.get (Response.headers resp) "Content-Type")
+                          |> function
+                            | Some s -> s
+                            | None -> ""
                         in
                         match String.trim (String.lowercase_ascii mime) with
-                          | Some "application/json; charset=utf-8"
-                          | None ->
+                          | "application/json; charset=utf-8"
+                          | "" ->
                               let json = Yojson.Safe.from_string s in
                               begin match [%e func] json with
                                 | Ok _ as x ->
@@ -124,7 +127,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                                        Yojson.Safe.pretty_to_string json
                                        ^ "\n")
                               end
-                          | Some s ->
+                          | s ->
                               Error (
                                 Printf.sprintf
                                   "bad response Content-Type (%s):expected (%s)"
