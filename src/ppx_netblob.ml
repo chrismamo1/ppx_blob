@@ -96,6 +96,8 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
               labels
           in
           let is_option = List.exists is_optional labels in
+          (* [fn] is the actual HTTP calling function, so it's at the very
+           * bottom of the recursive stack *)
           let fn =
             let formatter =
               match format with
@@ -138,14 +140,30 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
             in
             let payload =
               [%expr
-                Client.get uri
+                let headers = Cohttp.Header.init_with "User-Agent" "Mozilla/5.0" in
+                Client.get ~headers uri
                 >>= fun (resp, body) ->
                 let rcode = Code.code_of_status (Response.status resp) in
                 match rcode with
                   | 200 ->
                       Cohttp_lwt_body.to_string body
                       >>= fun s ->
-                      Lwt.return ([%e formatter] s)]
+                      Lwt.return ([%e formatter] s)
+                  | 301 ->
+                      let msg =
+                        match Header.get (Cohttp_lwt_unix.Response.headers resp) "Location" with
+                          | Some s -> s
+                          | None -> "ERROR: no redirect target specified"
+                      in
+                      Lwt.fail_with (
+                        Printf.sprintf
+                          "Netblob received HTTP response code 301, meaning \
+                          that the requested resource has been moved to %s"
+                          msg)
+                  | n ->
+                      Lwt.fail_with (
+                        Printf.sprintf
+                          "Netblob received HTTP response code %d" n)]
             in
             match is_option with
               | true ->
@@ -214,20 +232,21 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
             let add_path_to_uri_accum =
               [%expr
                 let [x] = [%e converter] [%e evar_name] in
-                let uri = Uri.with_path uri x in
+                let path = Filename.concat (Uri.path uri) x in
+                let uri = Uri.with_path uri path in
                 [%e accum]]
+            in
+            let addparam_accum =
+              match attr_ispathparam attrs with
+                | true ->
+                    add_path_to_uri_accum
+                | false ->
+                    add_to_uri_accum
             in
             match attr_default attrs with
               | Some default ->
                   let default = Some (Ppx_deriving.quote ~quoter default) in
-                  let acc =
-                    match attr_ispathparam attrs with
-                      | true ->
-                          add_path_to_uri_accum
-                      | false ->
-                          add_to_uri_accum
-                  in
-                  Exp.fun_ (Label.optional name) default (pvar name) acc
+                  Exp.fun_ (Label.optional name) default (pvar name) addparam_accum
               | None ->
                   begin match pld_type with
                     | [%type: [%t? _] option] ->
@@ -250,7 +269,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                         in
                         Exp.fun_ (Label.optional name) None (pvar name) accum'
                     | _ ->
-                        Exp.fun_ (Label.labelled name) None (pvar name) add_to_uri_accum
+                        Exp.fun_ (Label.labelled name) None (pvar name) addparam_accum
                   end)
             fn
             labels

@@ -68,12 +68,12 @@ type weather_req =
   { url = "http://api.openweathermap.org/data/2.5/weather"
   ; meth = `Get
   ; format = `Json weather_of_yojson }]
-(** netblob_weather_req : q:string -> appid:string -> (weather Result.result) Lwt.t *)
+(** netblob_get_weather_req : q:string -> appid:string -> (weather Result.result) Lwt.t *)
 
 let () =
   let city = Sys.argv.(1) in
   Lwt_main.run (
-    netblob_weather_req ~q:city ~appid:"f2fe6367e16e3e7ddd4b00cca425a084"
+    netblob_get_weather_req ~q:city ~appid:"f2fe6367e16e3e7ddd4b00cca425a084"
     >>= function
       | Result.Ok weather ->
           Lwt_io.printf
