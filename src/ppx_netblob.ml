@@ -138,10 +138,17 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                 | `Xml -> [%expr (fun s -> Xmlm.make_input (`String (0, s)))]
                 | `Text -> [%expr (fun s -> s)]
             in
+            let requestor =
+              match meth with
+                | `Get -> [%expr Client.get ~headers uri]
+                | `Post -> [%expr Client.get ~headers uri]
+            in
             let payload =
               [%expr
                 let headers = Cohttp.Header.init_with "User-Agent" "Mozilla/5.0" in
-                Client.get ~headers uri
+                Lwt_io.printf "url: %s\n" (Uri.to_string uri)
+                >>= fun _ ->
+                [%e requestor]
                 >>= fun (resp, body) ->
                 let rcode = Code.code_of_status (Response.status resp) in
                 match rcode with
@@ -150,16 +157,10 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                       >>= fun s ->
                       Lwt.return ([%e formatter] s)
                   | 301 ->
-                      let msg =
-                        match Header.get (Cohttp_lwt_unix.Response.headers resp) "Location" with
-                          | Some s -> s
-                          | None -> "ERROR: no redirect target specified"
-                      in
                       Lwt.fail_with (
                         Printf.sprintf
                           "Netblob received HTTP response code 301, meaning \
-                          that the requested resource has been moved to %s"
-                          msg)
+                          that the requested resource has been moved.")
                   | n ->
                       Lwt.fail_with (
                         Printf.sprintf
@@ -236,12 +237,29 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                 let uri = Uri.with_path uri path in
                 [%e accum]]
             in
+            let add_post_param_accum =
+              [%expr
+                let x = [%e converter] [%e evar_name] in
+                let body =
+                  match body with
+                    | "" ->
+                        (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x)
+                    | s ->
+                        s ^ "&" ^ (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x)
+                in
+                [%e accum]]
+            in
             let addparam_accum =
               match attr_ispathparam attrs with
                 | true ->
                     add_path_to_uri_accum
                 | false ->
-                    add_to_uri_accum
+                    begin match attr_ispostparam attrs with
+                      | true ->
+                          add_post_param_accum
+                      | false ->
+                          add_to_uri_accum
+                    end
             in
             match attr_default attrs with
               | Some default ->
@@ -282,6 +300,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
       let open Cohttp_lwt_unix in
       let open Lwt in
       let uri = Uri.of_string [%e uri] in
+      let body = "" in
       [%e creator]]
   in
   let prefix =
