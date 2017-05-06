@@ -301,12 +301,20 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                 in
                 [%e accum]]
             in
+            let add_body_accum =
+              [%expr
+                let [x] = [%e converter] [%e evar_name] in
+                let body = x in
+                [%e accum]]
+            in
             let addparam_accum =
               match attr_ispathparam attrs with
                 | true ->
                     add_path_to_uri_accum
                 | false ->
-                    begin match attr_ispostparam attrs with
+                    if name = "body"
+                    then add_body_accum
+                    else begin match attr_ispostparam attrs with
                       | true ->
                           add_post_param_accum
                       | false ->
