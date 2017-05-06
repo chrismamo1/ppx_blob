@@ -19,7 +19,12 @@ let raise_errorf = Ppx_deriving.raise_errorf
  * something, add support for more than just `get` requests
  *)
 let parse_options options =
-  let (_, expr) = List.hd options in
+  let (_, expr) =
+    try
+      List.hd options
+    with
+      | exn -> raise (Failure "parsing options")
+  in
   try
     let url =
       List.find (fun (name, _) -> name = "url") options
@@ -39,8 +44,7 @@ let parse_options options =
       |> snd
       |> function
         | [%expr `Get] -> `Get
-        | [%expr `Post] ->
-            raise_errorf ~loc:expr.pexp_loc "%s does not yet support the POST method" deriver
+        | [%expr `Post] -> `Post
         | _ ->
             raise_errorf ~loc:expr.pexp_loc "%s: invalid HTTP method" deriver
     in
@@ -139,38 +143,85 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                 | `Text -> [%expr (fun s -> s)]
             in
             let requestor =
-              match meth with
+              begin match meth with
                 | `Get -> [%expr Client.get ~headers uri]
-                | `Post -> [%expr Client.get ~headers uri]
+                | `Post -> [%expr Client.post ~headers ~body:(Cohttp_lwt_body.of_string body) uri]
+              end
             in
             let payload =
               [%expr
                 let headers = Cohttp.Header.init_with "User-Agent" "Mozilla/5.0" in
+                let cookies =
+                  begin match cookies with
+                    | [] -> ""
+                    | cookies' ->
+                        let first_cookie =
+                          (*let (k, v) = List.hd cookies' in
+                          k ^ "=" ^ v*)
+                          "a=a"
+                        in
+                        List.fold_left
+                          (fun acc (k, v) ->
+                            acc ^ "; " ^ k ^ "=" ^ v)
+                          first_cookie
+                          (List.tl cookies')
+                  end
+                in
+                let headers = Cohttp.Header.(add headers "Cookie" cookies) in
                 Lwt_io.printf "url: %s\n" (Uri.to_string uri)
                 >>= fun _ ->
                 [%e requestor]
                 >>= fun (resp, body) ->
+                let cookies_headers = Cohttp.Header.get_multi resp.headers "Set-Cookie" in
+                let cookies =
+                  begin match Cohttp.Header.get resp.headers "Cookie" with
+                    | Some cookies ->
+                        ExtString.String.nsplit cookies "; "
+                        |> List.map
+                            (fun cookie ->
+                              let [k; v] = ExtString.String.nsplit cookie "=" in
+                              k, v)
+                    | None ->
+                        []
+                  end
+                in
+                let cookies =
+                  List.fold_left
+                    (fun acc c ->
+                      acc @ (
+                        ExtString.String.nsplit c ";"
+                        |> List.hd
+                        |> fun s ->
+                            ExtString.String.nsplit s "="
+                        |> fun [k; v] ->
+                            [k, v]))
+                    cookies
+                    cookies_headers
+                in
                 let rcode = Code.code_of_status (Response.status resp) in
+                (* return a triple of the code, body, cookies *)
                 match rcode with
                   | 200 ->
                       Cohttp_lwt_body.to_string body
                       >>= fun s ->
-                      Lwt.return ([%e formatter] s)
+                      Lwt.return (200, ([%e formatter] s), cookies)
                   | 301 ->
                       Lwt.fail_with (
                         Printf.sprintf
                           "Netblob received HTTP response code 301, meaning \
                           that the requested resource has been moved.")
                   | n ->
-                      Lwt.fail_with (
-                        Printf.sprintf
-                          "Netblob received HTTP response code %d" n)]
+                      Cohttp_lwt_body.to_string body
+                      >>= fun s ->
+                      Lwt.return (n, ([%e formatter] s), cookies)]
             in
-            match is_option with
+            let payload = Exp.fun_ Label.nolabel None (punit ()) payload in
+            Exp.fun_ (Label.optional "cookies") (Some [%expr []]) (pvar "cookies") payload
+            (*match is_option with
               | true ->
                   Exp.fun_ Label.nolabel None (punit ()) payload
               | false ->
-                  payload
+                  payload*)
           in
           List.fold_left (fun accum { pld_name = { txt = name }; pld_type; pld_attributes } ->
             let attrs = pld_attributes @ pld_type.ptyp_attributes in
@@ -239,13 +290,14 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
             in
             let add_post_param_accum =
               [%expr
-                let x = [%e converter] [%e evar_name] in
+                let [x] = [%e converter] [%e evar_name] in
                 let body =
-                  match body with
+                  begin match body with
                     | "" ->
                         (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x)
                     | s ->
                         s ^ "&" ^ (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x)
+                  end
                 in
                 [%e accum]]
             in
