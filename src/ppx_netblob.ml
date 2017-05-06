@@ -156,9 +156,8 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                     | [] -> ""
                     | cookies' ->
                         let first_cookie =
-                          (*let (k, v) = List.hd cookies' in
-                          k ^ "=" ^ v*)
-                          "a=a"
+                          let (k, v) = List.hd cookies' in
+                          k ^ "=" ^ v
                         in
                         List.fold_left
                           (fun acc (k, v) ->
