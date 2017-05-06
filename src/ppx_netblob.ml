@@ -120,6 +120,7 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                         in
                         match String.trim (String.lowercase_ascii mime) with
                           | "application/json; charset=utf-8"
+                          | "application/json;"
                           | "" ->
                               let json = Yojson.Safe.from_string s in
                               begin match [%e func] json with
