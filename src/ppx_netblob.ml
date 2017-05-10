@@ -120,6 +120,8 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                         in
                         match String.trim (String.lowercase_ascii mime) with
                           | "application/json; charset=utf-8"
+                          | "application/json;"
+                          | "application/json"
                           | "" ->
                               let json = Yojson.Safe.from_string s in
                               begin match [%e func] json with
@@ -156,9 +158,8 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                     | [] -> ""
                     | cookies' ->
                         let first_cookie =
-                          (*let (k, v) = List.hd cookies' in
-                          k ^ "=" ^ v*)
-                          "a=a"
+                          let (k, v) = List.hd cookies' in
+                          k ^ "=" ^ v
                         in
                         List.fold_left
                           (fun acc (k, v) ->
@@ -301,12 +302,20 @@ let str_of_type ~options ~path ({ ptype_loc = loc } as type_decl) =
                 in
                 [%e accum]]
             in
+            let add_body_accum =
+              [%expr
+                let [x] = [%e converter] [%e evar_name] in
+                let body = x in
+                [%e accum]]
+            in
             let addparam_accum =
               match attr_ispathparam attrs with
                 | true ->
                     add_path_to_uri_accum
                 | false ->
-                    begin match attr_ispostparam attrs with
+                    if name = "body"
+                    then add_body_accum
+                    else begin match attr_ispostparam attrs with
                       | true ->
                           add_post_param_accum
                       | false ->
